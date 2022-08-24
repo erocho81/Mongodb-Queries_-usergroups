@@ -1,0 +1,124 @@
+Mongodb Queries for users of different groups.
+
+Find users with an age lower than 50 from Madrid:
+
+db.getCollection("Usuarios_Individuales").find(
+{ Edad:{$lt:50},
+Ciudad:"Madrid"},
+{"Email":1,"Nombre":1,"Apellidos":1}
+)
+.sort({"Email":-1})
+
+
+Users that blocked and where blocked between time 10:30 and 11h:
+
+db.getCollection("Bloqueos").find(
+{$and:[
+    {$and:[ 
+        {"Hora_bloqueo.Hora":{$eq:10}},     
+        {"Hora_bloqueo.Minutos":{$gt:30}}
+        ]},
+
+{"Hora_bloqueo.Hora":{$lt:11}}
+]},
+{"Usuario_bloqueador.Nombre":1, "Usuario_bloqueado.Nombre":1}
+)
+
+
+Search in arrays to check users in groups and subgroups from the cities Madrid and Barcelona:
+
+db.getCollection("Grupos_usuarios").find(
+{Miembros:
+{$elemMatch
+:{Ciudad : "Madrid", Ciudad: "Barcelona"},
+}},
+{"Nombre_Grupo":1}
+);
+
+
+
+Remove users from group "Billetes AVE" and city "Bilbao":
+
+db.getCollection("Grupos_usuarios").remove(
+
+{$and:[
+        {Miembros:    
+                {$elemMatch :{Ciudad : "Bilbao"}}},
+        		{"Nombre_Grupo":"Billetes AVE"} 
+         ]},    
+);
+
+
+
+
+Create a new collection called "ciudades" using the previously existing "Usuarios Grupos" 
+that contains a list of users and the nbr of groups they are members for each city:
+
+db.Usuarios_grupos.aggregate([
+{ $unwind: "$Grupos_miembro" },
+{$group: {"_id": "$Ciudad",
+   	"Usuarios": {$push: {
+       	"Usuario": {$concat: ["$Nombre", " " ,"$Apellidos"]},
+                   	"NumeroGrupos": {$sum: 1}
+                        }}}
+},
+{$project: {"_id":"$_id",
+"Usuarios": "$Usuarios"
+}},
+{$sort: {"NumeroGrupos": -1}},
+])
+
+
+Database related to map points.
+Queries to import information to the Mongodb server:
+
+mongoimport --db pec3 --collection cartografiaBarrios </home/student/Neo4j/cartografiaBarrios.geojson --jsonArray
+
+mongoimport --db pec3 --collection puntosInformacion </home/student/Neo4j/puntosInformacion.geojson --jsonArray
+
+
+
+Create of an index for elements of geometry point type:
+
+db.cartografiaBarrios.createIndex({ 'geometry.type':1})
+db.puntosInformacion.createIndex({ 'geometry.type':1})
+
+Checking indexes:
+
+db.puntosInformacion.getIndexes()
+db.cartografiaBarrios.getIndexes()
+
+
+Query to show equipment_id and description of "puntosInformacion" located in the block of "LA MALAGUETA":
+
+var barr= db.cartografiaBarrios.findOne(
+{"properties.NOMBRE BARRIO": "LA MALAGUETA"});
+
+db.puntosInformacion.find(
+	{"geometry": {
+	$geoWithin : { $geometry : barr.geometry} }
+	},
+{ "properties.equipment_id" : 1 ,
+"properties.description" : 1}
+);
+
+
+
+Query to show description and coordinates for each "puntoInformación" within less than 1 km of coordinates (-4.4090 , 36.7184).
+(We create a new index first)
+
+db.puntosInformacion.createIndex({“geometry:"2dsphere"});
+
+
+db.puntosInformacion.find(
+{ "geometry" : 
+        {$near: {"type" : "Point" ,
+              	 "coordinates" : [-4.4090, 36.7184]}, 
+               	 $maxDistance : 1000}
+},
+
+{ "properties.description" : 1 ,
+"geometry.coordinates" : 1,
+"_id": 0}
+)
+
